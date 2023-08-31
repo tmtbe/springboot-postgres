@@ -1,0 +1,571 @@
+openapi: 3.0.1
+info:
+  title: testCenter
+  description: ''
+  version: 1.0.0
+tags:
+  - name: original
+paths:
+  /originals:
+    post:
+      tags:
+        - original
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResult'
+              examples: {}
+      operationId: post-originals
+      description: 上传原始流量
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sut:
+                  type: string
+                sutImage:
+                  type: string
+                batchId:
+                  type: string
+                traceInfos:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      service_name:
+                        type: string
+                      trace_id:
+                        type: string
+                      trace_type:
+                        type: string
+                      trace_kind:
+                        type: string
+                      span_id:
+                        type: string
+                      parent_span_id:
+                        type: string
+                      headers:
+                        type: array
+                        items:
+                          type: array
+                          items:
+                            type: string
+                      body:
+                        type: string
+                      service_image:
+                        type: string
+                    required:
+                      - service_name
+                      - trace_id
+                      - trace_type
+                      - trace_kind
+                      - span_id
+                      - parent_span_id
+                      - headers
+                      - body
+                      - service_image
+              required:
+                - sut
+                - sutImage
+                - batchId
+                - traceInfos
+        description: ''
+      summary: Upload Original Record
+    parameters: []
+  '/original/{id}':
+    parameters:
+      - schema:
+          type: number
+        name: id
+        in: path
+        required: true
+    get:
+      summary: Get Original Resource
+      tags:
+        - original
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HttpOriginalRecord'
+              examples: { }
+        '404':
+          description: Not Found
+      operationId: get-original-id
+  /openapis:
+    post:
+      summary: Upload OpenApi
+      operationId: post-openapis
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResult'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceName:
+                  type: string
+                openapi:
+                  type: object
+              required:
+                - serviceName
+                - openapi
+      tags:
+        - openapi
+      description: 上传openapi
+  '/openapi/{openapi_id}':
+    parameters:
+      - schema:
+          type: number
+        name: openapi_id
+        in: path
+        required: true
+    get:
+      summary: Get OpenApi Resource
+      tags:
+        - openapi
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenApi'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenApi'
+      operationId: get-openapi-openapi_id
+      description: 获取openApi资源
+  /services:
+    post:
+      summary: Create Service
+      operationId: post-service-serviceName
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required:
+                - name
+      tags:
+        - service
+      description: 创建服务
+  '/service/{service_name}':
+    parameters:
+      - schema:
+          type: string
+        name: service_name
+        in: path
+        required: true
+    get:
+      summary: Get Service Resource
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+              examples: { }
+        '404':
+          description: Not Found
+      operationId: get-service-service_name
+      description: 获取服务的资源
+      tags:
+        - service
+  /contracts/auto-create:
+    parameters: []
+    put:
+      summary: Auto Create Contract
+      tags:
+        - contract
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResult'
+      operationId: put-contract-auto-create
+      description: 为服务流量创建自动契约
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sut:
+                  type: string
+                batchId:
+                  type: string
+              required:
+                - sut
+                - batchId
+        description: ''
+  /contracts/create:
+    parameters: [ ]
+    post:
+      summary: Create Contract
+      tags:
+        - contract
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+      operationId: post-contract-create
+      description: 为服务流量创建手动契约
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceName:
+                  type: string
+                openApiId:
+                  type: number
+                operationId:
+                  type: number
+                jsonContract:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/JsonContractItem'
+                copyFromContractId:
+                  type: number
+                desc:
+                  type: string
+              required:
+                - serviceName
+                - openApiId
+                - operationId
+                - jsonContract
+                - copyFromContractId
+                - desc
+        description: ''
+  /contracts/pre-create:
+    parameters: [ ]
+    post:
+      summary: Pre Create Contract
+      tags:
+        - contract
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+      operationId: post-contract-pre-create
+      description: 预创建契约
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                serviceName:
+                  type: string
+                openApiId:
+                  type: number
+                operationId:
+                  type: number
+                jsonContract:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/JsonContractItem'
+                copyFromContractId:
+                  type: number
+                desc:
+                  type: string
+              required:
+                - serviceName
+                - openApiId
+                - operationId
+                - jsonContract
+                - copyFromContractId
+                - desc
+        description: ''
+  '/contract/{contract_id}':
+    parameters:
+      - schema:
+          type: number
+        name: contract_id
+        in: path
+        required: true
+    get:
+      summary: Get Contract Resource
+      tags:
+        - contract
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contract'
+        '404':
+          description: Not Found
+      operationId: get-contract-contract_id
+      description: 获取契约资源
+      parameters:
+        - schema:
+            type: number
+          in: query
+          name: openApiId
+          description: 填写了openApiId将会进行api验证
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    StatusResult:
+      title: Status
+      type: object
+      properties:
+        status:
+          type: integer
+        error:
+          type: string
+      description: ''
+    Service:
+      title: Service
+      x-stoplight:
+        id: rl4ngbun5tugp
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        openApis:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenApi'
+      description: 服务
+    OpenApi:
+      title: OpenApi
+      x-stoplight:
+        id: 203mhdfdtsmfa
+      type: object
+      properties:
+        id:
+          type: number
+        md5:
+          type: string
+        createdDate:
+          type: string
+        openApi:
+          type: object
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpenApiOperation'
+    OpenApiOperation:
+      title: OpenApiOperation
+      x-stoplight:
+        id: eqp4r9ly2llpg
+      type: object
+      description: openapi条目
+      properties:
+        id:
+          type: number
+        method:
+          type: string
+        path:
+          type: string
+        code:
+          type: integer
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+    Contract:
+      title: Contract
+      x-stoplight:
+        id: 9hg373c18x2ea
+      type: object
+      description: 契约
+      properties:
+        id:
+          type: number
+        contractType:
+          type: string
+          enum:
+            - AUTO
+            - MANUAL
+        jsonContract:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonContractItem'
+        createDate:
+          type: string
+        httpOriginals:
+          type: array
+          items:
+            $ref: '#/components/schemas/HttpOriginal'
+        providerServiceName:
+          type: string
+        providerServiceImage:
+          type: string
+        consumerServiceName:
+          type: string
+        consumerServiceImage:
+          type: string
+        contractKind:
+          type: string
+          enum:
+            - FROM_CONSUMER
+            - FROM_PROVIDER
+        fromSutImage:
+          type: string
+        fromSut:
+          type: string
+        desc:
+          type: string
+        contractStatus:
+          type: string
+          enum:
+            - ALONG
+            - READY
+        validator:
+          $ref: '#/components/schemas/OpenApiValidator'
+    HttpOriginal:
+      title: HttpOriginal
+      type: object
+      x-stoplight:
+        id: f9fefaaad8779
+      properties:
+        req:
+          $ref: '#/components/schemas/HttpOriginalRecord'
+        resp:
+          $ref: '#/components/schemas/HttpOriginalRecord'
+        validator:
+          $ref: '#/components/schemas/OpenApiValidator'
+        sut:
+          type: string
+        sutImage:
+          type: string
+        serviceName:
+          type: string
+        serviceImage:
+          type: string
+        type:
+          type: string
+          enum:
+            - AS_PROVIDER
+            - AS_CONSUMER
+      required:
+        - sut
+        - sutImage
+        - serviceName
+        - serviceImage
+        - type
+    HttpOriginalRecord:
+      title: HttpOriginalRecord
+      x-stoplight:
+        id: 3yfcjitdq9w8u
+      type: object
+      properties:
+        id:
+          type: number
+        traceId:
+          type: string
+        traceType:
+          type: string
+        traceKind:
+          type: string
+        spanId:
+          type: string
+        parentSpanId:
+          type: string
+        headers:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              value:
+                type: string
+        body:
+          type: string
+        serviceName:
+          type: string
+        serviceImage:
+          type: string
+        sut:
+          type: string
+        sutImage:
+          type: string
+    OpenApiValidator:
+      title: OpenApiValidator
+      x-stoplight:
+        id: jxzayxb3l8ap5
+      type: object
+      properties:
+        success:
+          type: boolean
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              error:
+                type: string
+              from:
+                type: string
+    JsonContractItem:
+      title: JsonContractItem
+      x-stoplight:
+        id: 983a583d52fd9
+      type: object
+      properties:
+        path:
+          type: string
+        value:
+          type: string
+        valueType:
+          type: string
+          enum:
+            - java.lang.String
+            - java.lang.Integer
+            - java.lang.Long
+            - java.lang.Double
+            - java.lang.Float
+            - java.lang.Boolean
+      required:
+        - path
+        - value
+        - valueType
+      description: ''
+  requestBodies: {}

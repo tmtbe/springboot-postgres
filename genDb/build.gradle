@@ -1,0 +1,81 @@
+import org.testcontainers.containers.MySQLContainer
+buildscript {
+    dependencies {
+        classpath 'org.testcontainers:mysql:1.17.3'
+        classpath 'mysql:mysql-connector-java:8.0.31'
+        classpath 'org.flywaydb:flyway-mysql:9.0.1'
+    }
+}
+
+plugins {
+    id 'java'
+    id 'nu.studer.jooq' version '8.2'
+    id 'org.flywaydb.flyway' version '9.7.0'
+}
+
+configurations {
+    flywayMigration
+}
+
+dependencies {
+    flywayMigration 'mysql:mysql-connector-java:8.0.31'
+    jooqGenerator 'mysql:mysql-connector-java:8.0.31'
+}
+
+task dbContainer {
+    var instance = new MySQLContainer("mysql:8.0.31")
+            .withDatabaseName('example')
+    instance.start()
+    dbContainer.ext.jdbcUrl = instance.getJdbcUrl()
+    dbContainer.ext.username = instance.getUsername()
+    dbContainer.ext.password = instance.getPassword()
+    dbContainer.ext.databaseName = instance.getDatabaseName()
+    dbContainer.ext.instance = instance
+}
+
+flyway {
+    configurations = ['flywayMigration']
+    url = dbContainer.jdbcUrl
+    user = dbContainer.username
+    password = dbContainer.password
+}
+
+jooq {
+    configurations {
+        main {
+            generationTool {
+                logging = org.jooq.meta.jaxb.Logging.WARN
+                jdbc {
+                    driver = 'com.mysql.cj.jdbc.Driver'
+                    url = dbContainer.jdbcUrl
+                    user = dbContainer.username
+                    password = dbContainer.password
+                }
+                generator {
+                    name = 'org.jooq.codegen.DefaultGenerator'
+                    database {
+                        name = 'org.jooq.meta.mysql.MySQLDatabase'
+                        includes = '.*'
+                        inputSchema = dbContainer.databaseName
+                        outputSchemaToDefault = true
+                    }
+                    target {
+                        packageName = "${group}.${rootProject.name}"
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.named('generateJooq').configure {
+    dependsOn tasks.named('dbContainer')
+    dependsOn tasks.named('flywayMigrate')
+    inputs.files(fileTree('src/main/resources/db/migration'))
+            .withPropertyName('migrations')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+    allInputsDeclared = true
+    doLast {
+        dbContainer.instance.stop()
+    }
+}

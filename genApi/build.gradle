@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id "org.openapi.generator" version "7.0.0"
+}
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java','build/generated/src/main/java']
+        }
+        resources {
+            srcDirs = ['src/main/resources']
+        }
+    }
+}
+
+dependencies {
+    implementation 'io.swagger.core.v3:swagger-annotations:2.2.15'
+}
+
+openApiGenerate {
+    generatorName = "spring"
+    inputSpec = "$projectDir/openapi.yaml".toString()
+    outputDir = "$projectDir/build/generated".toString()
+    apiPackage = "${group}.${rootProject.name}.api".toString()
+    modelPackage = "${group}.${rootProject.name}.model".toString()
+    templateDir = "$projectDir/template".toString()
+    configOptions = [
+            title: "${rootProject.name}".toString(),
+            basePackage: "${group}.${rootProject.name}".toString(),
+            configPackage: "${group}.${rootProject.name}.config".toString(),
+            dateLibrary: "java8",
+            requestMappingMode: "api_interface",
+            delegatePattern: "true",
+            enumUnknownDefaultCase: "true",
+            //interfaceOnly: "true",
+            serializableModel: "true",
+            singleContentTypes: "true",
+            unhandledException: "true",
+            useEnumCaseInsensitive: "true",
+            useOptional: "true",
+            useOneOfInterfaces: "true",
+            useJakartaEe: "true",
+            useTags: "true",
+            hideGenerationTimestamp: "true",
+            useAuth: "true",
+            useSwaggerUI: "false",
+            annotationLibrary: "none",
+            documentationProvider: "none"
+    ]
+    typeMappings = [
+            number:"long"
+    ]
+    cleanupOutput = true
+}

@@ -1,0 +1,5 @@
+rootProject.name = 'projectDemo'
+include 'app'
+include 'genApi'
+include 'genDb'
+
