@@ -1,0 +1,4 @@
+additionalProperties:
+  test: test
+# files:
+#   AUTHORS.md: {}

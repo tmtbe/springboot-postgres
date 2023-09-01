@@ -8,7 +8,7 @@ sourceSets {
             srcDirs = ['src/main/java','build/generated/src/main/java']
         }
         resources {
-            srcDirs = ['src/main/resources']
+            srcDirs = ['src/main/resources','build/generated/src/main/resources']
         }
     }
 }
@@ -19,11 +19,12 @@ dependencies {
 
 openApiGenerate {
     generatorName = "spring"
-    inputSpec = "$projectDir/openapi.yaml".toString()
+    inputSpec = "$projectDir/src/main/resources/static/openapi.yaml".toString()
     outputDir = "$projectDir/build/generated".toString()
     apiPackage = "${group}.${rootProject.name}.api".toString()
     modelPackage = "${group}.${rootProject.name}.model".toString()
     templateDir = "$projectDir/template".toString()
+    configFile = "$projectDir/config.yaml".toString()
     configOptions = [
             title: "${rootProject.name}".toString(),
             basePackage: "${group}.${rootProject.name}".toString(),
@@ -32,7 +33,6 @@ openApiGenerate {
             requestMappingMode: "api_interface",
             delegatePattern: "true",
             enumUnknownDefaultCase: "true",
-            //interfaceOnly: "true",
             serializableModel: "true",
             singleContentTypes: "true",
             unhandledException: "true",
@@ -42,7 +42,6 @@ openApiGenerate {
             useJakartaEe: "true",
             useTags: "true",
             hideGenerationTimestamp: "true",
-            useAuth: "true",
             useSwaggerUI: "false",
             annotationLibrary: "none",
             documentationProvider: "none"

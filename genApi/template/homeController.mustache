@@ -101,4 +101,8 @@ public class HomeController {
 {{/reactive}}
 {{/useSwaggerUI}}
 
+    @RequestMapping("/redoc")
+    public String index() {
+        return "redirect:redoc/index.html";
+    }
 }

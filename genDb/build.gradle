@@ -20,6 +20,10 @@ configurations {
 dependencies {
     flywayMigration 'mysql:mysql-connector-java:8.0.31'
     jooqGenerator 'mysql:mysql-connector-java:8.0.31'
+    implementation 'mysql:mysql-connector-java:8.0.31'
+    implementation 'org.flywaydb:flyway-core'
+    implementation "org.flywaydb:flyway-mysql"
+    implementation 'org.springframework.boot:spring-boot-starter-jooq'
 }
 
 task dbContainer {
