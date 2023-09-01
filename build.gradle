@@ -23,15 +23,51 @@ subprojects {
             extendsFrom annotationProcessor
         }
     }
+    ext {
+        set('testcontainersVersion', "1.19.0")
+    }
     dependencies {
         implementation 'org.springframework.boot:spring-boot-starter'
         implementation 'org.springframework.boot:spring-boot-starter-validation'
         implementation "org.springframework.boot:spring-boot-starter-web"
+        implementation 'org.springframework.boot:spring-boot-starter-jooq'
         implementation 'org.openapitools:jackson-databind-nullable:0.2.6'
+        implementation 'javax.persistence:persistence-api:1.0.2'
+        implementation 'org.mapstruct:mapstruct:1.5.5.Final'
         compileOnly 'org.projectlombok:lombok'
+        testCompileOnly 'org.projectlombok:lombok'
         developmentOnly('org.springframework.boot:spring-boot-devtools')
         annotationProcessor 'org.projectlombok:lombok'
+        annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testImplementation "org.testcontainers:testcontainers:1.19.0"
     }
+}
+
+class GenTask extends DefaultTask {
+    @TaskAction
+    def start() {
+        project.ext.gen=true
+    }
+}
+task setGenEnable(type: GenTask){
+}
+
+task generateAll(type: DefaultTask){
+    group("application")
+    dependsOn("setGenEnable")
+    dependsOn("genApi:openApiGenerate")
+    dependsOn("genDb:generateJooq")
+}
+
+task generateApi(type: DefaultTask){
+    group("application")
+    dependsOn("setGenEnable")
+    dependsOn("genApi:openApiGenerate")
+}
+
+task generateDb(type: DefaultTask){
+    group("application")
+    dependsOn("setGenEnable")
+    dependsOn("genDb:generateJooq")
 }

@@ -23,25 +23,58 @@ dependencies {
     implementation 'mysql:mysql-connector-java:8.0.31'
     implementation 'org.flywaydb:flyway-core'
     implementation "org.flywaydb:flyway-mysql"
-    implementation 'org.springframework.boot:spring-boot-starter-jooq'
 }
 
-task dbContainer {
-    var instance = new MySQLContainer("mysql:8.0.31")
-            .withDatabaseName('example')
-    instance.start()
-    dbContainer.ext.jdbcUrl = instance.getJdbcUrl()
-    dbContainer.ext.username = instance.getUsername()
-    dbContainer.ext.password = instance.getPassword()
-    dbContainer.ext.databaseName = instance.getDatabaseName()
-    dbContainer.ext.instance = instance
+def dbContainerInfo = [
+        jdbcUrl: '',
+        username: '',
+        password: '',
+        databaseName: '',
+        instance: null
+]
+
+class DBStartTask extends DefaultTask {
+    @Input
+    LinkedHashMap<String, String> containerInfo = null
+
+    @TaskAction
+    def start() {
+        println("Starting MySQL container")
+        var instance = new MySQLContainer("mysql:8.0.31")
+                .withDatabaseName('example')
+        instance.start()
+        containerInfo.jdbcUrl = instance.getJdbcUrl()
+        containerInfo.username = instance.getUsername()
+        containerInfo.password = instance.getPassword()
+        containerInfo.databaseName = instance.getDatabaseName()
+        containerInfo.instance = instance
+    }
 }
 
-flyway {
-    configurations = ['flywayMigration']
-    url = dbContainer.jdbcUrl
-    user = dbContainer.username
-    password = dbContainer.password
+task startDbContainer(type: DBStartTask) {
+    containerInfo = dbContainerInfo
+}
+
+tasks.named('startDbContainer').configure {
+    onlyIf {
+        project.hasProperty("gen")
+    }
+}
+
+tasks.named('flywayMigrate').configure {
+    onlyIf {
+        project.hasProperty("gen")
+    }
+    dependsOn tasks.named('startDbContainer')
+    doFirst {
+        println("Setting up flyway")
+        flyway {
+            configurations = ['flywayMigration']
+            url = dbContainerInfo.jdbcUrl
+            user = dbContainerInfo.username
+            password = dbContainerInfo.password
+        }
+    }
 }
 
 jooq {
@@ -49,20 +82,7 @@ jooq {
         main {
             generationTool {
                 logging = org.jooq.meta.jaxb.Logging.WARN
-                jdbc {
-                    driver = 'com.mysql.cj.jdbc.Driver'
-                    url = dbContainer.jdbcUrl
-                    user = dbContainer.username
-                    password = dbContainer.password
-                }
                 generator {
-                    name = 'org.jooq.codegen.DefaultGenerator'
-                    database {
-                        name = 'org.jooq.meta.mysql.MySQLDatabase'
-                        includes = '.*'
-                        inputSchema = dbContainer.databaseName
-                        outputSchemaToDefault = true
-                    }
                     target {
                         packageName = "${group}.${rootProject.name}"
                     }
@@ -73,13 +93,51 @@ jooq {
 }
 
 tasks.named('generateJooq').configure {
-    dependsOn tasks.named('dbContainer')
+    onlyIf {
+        project.hasProperty("gen")
+    }
     dependsOn tasks.named('flywayMigrate')
-    inputs.files(fileTree('src/main/resources/db/migration'))
-            .withPropertyName('migrations')
-            .withPathSensitivity(PathSensitivity.RELATIVE)
-    allInputsDeclared = true
+    doFirst {
+        jooq {
+            configurations {
+                main {
+                    generationTool {
+                        jdbc {
+                            driver = 'com.mysql.cj.jdbc.Driver'
+                            url = dbContainerInfo.jdbcUrl
+                            user = dbContainerInfo.username
+                            password = dbContainerInfo.password
+                        }
+                        generator {
+                            name = 'org.jooq.codegen.DefaultGenerator'
+                            database {
+                                name = 'org.jooq.meta.mysql.MySQLDatabase'
+                                includes = '.*'
+                                inputSchema = dbContainerInfo.databaseName
+                                outputSchemaToDefault = true
+                            }
+                            generate {
+                                deprecated = false
+                                records = true
+                                pojos = true
+                                interfaces = true
+                                fluentSetters = true
+                                nullableAnnotation = true
+                                nullableAnnotationType = 'jakarta.annotation.Nullable'
+                                nonnullAnnotation = true
+                                nonnullAnnotationType = 'jakarta.annotation.Nonnull'
+                                daos = true
+                                springAnnotations = true
+                                springDao = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     doLast {
-        dbContainer.instance.stop()
+        println("Stopping MySQL container")
+        dbContainerInfo.instance.stop()
     }
 }

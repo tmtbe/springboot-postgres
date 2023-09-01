@@ -1,0 +1,5 @@
+embedded:
+  mysql:
+    enabled: true
+    dockerImage: mysql:8.0.31
+    database: example

@@ -16,8 +16,6 @@ sourceSets {
 dependencies {
     implementation 'io.swagger.core.v3:swagger-annotations:2.2.15'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
-    implementation 'io.virtualan:virtualan-plugin:2.5.5'
-    implementation 'org.hsqldb:hsqldb'
 }
 
 openApiGenerate {
@@ -33,7 +31,6 @@ openApiGenerate {
             basePackage: "${group}.${rootProject.name}".toString(),
             configPackage: "${group}.${rootProject.name}.config".toString(),
             dateLibrary: "java8",
-            requestMappingMode: "api_interface",
             delegatePattern: "true",
             enumUnknownDefaultCase: "true",
             serializableModel: "true",
@@ -46,7 +43,6 @@ openApiGenerate {
             useTags: "true",
             hideGenerationTimestamp: "true",
             useSwaggerUI: "true",
-            virtualService: "true"
     ]
     typeMappings = [
             number:"long"
