@@ -15,11 +15,14 @@ sourceSets {
 
 dependencies {
     implementation 'io.swagger.core.v3:swagger-annotations:2.2.15'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+    implementation 'io.virtualan:virtualan-plugin:2.5.5'
+    implementation 'org.hsqldb:hsqldb'
 }
 
 openApiGenerate {
     generatorName = "spring"
-    inputSpec = "$projectDir/src/main/resources/static/openapi.yaml".toString()
+    inputSpec = "$projectDir/openapi.yaml".toString()
     outputDir = "$projectDir/build/generated".toString()
     apiPackage = "${group}.${rootProject.name}.api".toString()
     modelPackage = "${group}.${rootProject.name}.model".toString()
@@ -42,9 +45,8 @@ openApiGenerate {
             useJakartaEe: "true",
             useTags: "true",
             hideGenerationTimestamp: "true",
-            useSwaggerUI: "false",
-            annotationLibrary: "none",
-            documentationProvider: "none"
+            useSwaggerUI: "true",
+            virtualService: "true"
     ]
     typeMappings = [
             number:"long"
