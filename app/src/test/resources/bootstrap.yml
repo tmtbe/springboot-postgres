@@ -1,5 +1,5 @@
 embedded:
-  mysql:
+  postgresql:
     enabled: true
-    dockerImage: mysql:8.0.31
-    database: example
+    dockerImage: postgres:16.2
+    schema: example

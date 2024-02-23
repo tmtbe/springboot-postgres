@@ -1,0 +1,38 @@
+version: '3.2'
+services:
+  elasticsearch:
+    image: elasticsearch:8.12.1
+    restart: always
+    ports:
+      - 9200:9200
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - ./elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+  kibana:
+    image: kibana:8.12.1
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    restart: always
+    ports:
+      - 5601:5601
+    volumes:
+      - ./kibana.yml:/usr/share/kibana/config/kibana.yml
+  pgsql:
+    image: postgres:16.2
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: example
+      POSTGRES_USER: test
+    ports:
+      - 5432:5432
+  rabbitmq:
+    image: rabbitmq:3.12.13-management
+    restart: always
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${embedded.mysql.host}:${embedded.mysql.port}/example?serverTimezone=Asia/Shanghai&zeroDateTimeBehavior=convertToNull&autoReconnect=true&useSSL=false&failOverReadOnly=false&allowPublicKeyRetrieval=true
-    username: ${embedded.mysql.user}
-    password: ${embedded.mysql.password}
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${embedded.postgresql.host}:${embedded.postgresql.port}/example
+    username: ${embedded.postgresql.user}
+    password: ${embedded.postgresql.password}

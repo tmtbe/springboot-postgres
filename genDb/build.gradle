@@ -1,16 +1,16 @@
-import org.testcontainers.containers.MySQLContainer
+import org.testcontainers.containers.PostgreSQLContainer
 buildscript {
     dependencies {
-        classpath 'org.testcontainers:mysql:1.17.3'
-        classpath 'mysql:mysql-connector-java:8.0.31'
-        classpath 'org.flywaydb:flyway-mysql:9.0.1'
+        classpath 'org.testcontainers:postgresql:1.19.5'
+        classpath 'org.postgresql:postgresql:42.7.2'
+        classpath 'org.flywaydb:flyway-database-postgresql:10.8.1'
     }
 }
 
 plugins {
     id 'java'
     id 'nu.studer.jooq' version '8.2'
-    id 'org.flywaydb.flyway' version '9.7.0'
+    id 'org.flywaydb.flyway' version '10.8.1'
 }
 
 configurations {
@@ -18,11 +18,11 @@ configurations {
 }
 
 dependencies {
-    flywayMigration 'mysql:mysql-connector-java:8.0.31'
-    jooqGenerator 'mysql:mysql-connector-java:8.0.31'
-    implementation 'mysql:mysql-connector-java:8.0.31'
-    implementation 'org.flywaydb:flyway-core'
-    implementation "org.flywaydb:flyway-mysql"
+    flywayMigration 'org.postgresql:postgresql:42.7.2'
+    jooqGenerator 'org.postgresql:postgresql:42.7.2'
+    implementation 'org.postgresql:postgresql:42.7.2'
+    implementation 'org.flywaydb:flyway-core:10.8.1'
+    implementation "org.flywaydb:flyway-database-postgresql:10.8.1"
 }
 
 def dbContainerInfo = [
@@ -39,8 +39,8 @@ class DBStartTask extends DefaultTask {
 
     @TaskAction
     def start() {
-        println("Starting MySQL container")
-        var instance = new MySQLContainer("mysql:8.0.31")
+        println("Starting Pgsql container")
+        var instance = new PostgreSQLContainer("postgres:16.2")
                 .withDatabaseName('example')
         instance.start()
         containerInfo.jdbcUrl = instance.getJdbcUrl()
@@ -103,7 +103,7 @@ tasks.named('generateJooq').configure {
                 main {
                     generationTool {
                         jdbc {
-                            driver = 'com.mysql.cj.jdbc.Driver'
+                            driver = 'org.postgresql.Driver'
                             url = dbContainerInfo.jdbcUrl
                             user = dbContainerInfo.username
                             password = dbContainerInfo.password
@@ -111,10 +111,16 @@ tasks.named('generateJooq').configure {
                         generator {
                             name = 'org.jooq.codegen.DefaultGenerator'
                             database {
-                                name = 'org.jooq.meta.mysql.MySQLDatabase'
+                                name = 'org.jooq.meta.postgres.PostgresDatabase'
                                 includes = '.*'
-                                inputSchema = dbContainerInfo.databaseName
+                                inputSchema = "public"
                                 outputSchemaToDefault = true
+                                forcedTypes {
+                                    forcedType {
+                                        name = 'BOOLEAN'
+                                        includeTypes = 'BOOL'
+                                    }
+                                }
                             }
                             generate {
                                 deprecated = false
@@ -137,7 +143,7 @@ tasks.named('generateJooq').configure {
         }
     }
     doLast {
-        println("Stopping MySQL container")
+        println("Stopping Pgsql container")
         dbContainerInfo.instance.stop()
     }
 }
