@@ -4,35 +4,29 @@ info:
   description: ''
   version: 1.0.0
 tags:
-  - name: doc
+  - name: collection
+  - name: index
 paths:
-  '/indices/{indexName}/doc/{docId}':
-    parameters:
-      - schema:
-          type: string
-        name: indexName
-        in: path
-        required: true
-      - schema:
-          type: string
-        name: docId
-        in: path
-        required: true
+  /collections:
     get:
-      summary: 获取文档
-      tags:
-        - doc
+      summary: 获取所有的数据集合
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DocumentModel'
-      operationId: get-indices-indexName-doc
-    put:
-      summary: 更新文档
-      operationId: put-indices-indexName-doc-docId
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionModel'
+      operationId: get-collections
+      tags:
+        - collection
+    parameters: []
+  '/collections/{collectionName}/docs':
+    post:
+      summary: 批量上传文档
+      operationId: post-collections-docs
       responses:
         '200':
           description: OK
@@ -40,14 +34,69 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              type: array
+              items:
+                type: object
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: batchId
       tags:
-        - doc
+        - collection
+    parameters:
+      - schema:
+          type: string
+        name: collectionName
+        in: path
+        required: true
+  '/collections/{collectionName}':
+    parameters:
+      - schema:
+          type: string
+        name: collectionName
+        in: path
+        required: true
+    get:
+      summary: 获取Collection信息
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionModel'
+      operationId: get-collections-collectionName
+      tags:
+        - collection
+    delete:
+      summary: 删除Collection
+      operationId: delete-collections-collectionName
+      responses:
+        '200':
+          description: OK
+      tags:
+        - collection
+    put:
+      summary: 创建Collection
+      operationId: put-collections-collectionName
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionModel'
+      tags:
+        - collection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionModel'
   '/indices/{indexName}':
     put:
       summary: 添加index
-      tags:
-        - doc
       responses:
         '200':
           description: OK
@@ -63,6 +112,8 @@ paths:
             schema:
               $ref: '#/components/schemas/IndexModel'
         description: ''
+      tags:
+        - index
     parameters:
       - schema:
           type: string
@@ -80,9 +131,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/IndexModel'
       tags:
-        - doc
+        - index
     post:
-      summary: 快速更新index，mapping关系的更新有可能出错，这时则需要调用recreate
+      summary: 更新index
       operationId: post-indices-indexName
       responses:
         '200':
@@ -97,7 +148,7 @@ paths:
             schema:
               $ref: '#/components/schemas/IndexModel'
       tags:
-        - doc
+        - index
     delete:
       summary: 删除索引
       operationId: delete-indices-indexName
@@ -105,34 +156,50 @@ paths:
         '200':
           description: OK
       tags:
-        - doc
-  '/indices/{indexName}/docs':
-    post:
-      summary: 批量上传文档
-      operationId: post-indices-docs
-      responses:
-        '200':
-          description: OK
-      tags:
-        - doc
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                type: object
+        - index
       parameters:
         - schema:
-            type: string
+            type: boolean
           in: query
-          name: batchId
+          name: retainData
+          description: 是否保留index对doc的修改
+  '/indices/{indexName}/doc/{docId}':
     parameters:
       - schema:
           type: string
         name: indexName
         in: path
         required: true
+      - schema:
+          type: string
+        name: docId
+        in: path
+        required: true
+    get:
+      summary: 获取文档
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentModel'
+      operationId: get-indices-indexName-doc
+      tags:
+        - index
+    put:
+      summary: 更新文档
+      operationId: put-indices-indexName-doc-docId
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      tags:
+        - index
   '/indices/{indexName}/search':
     parameters:
       - schema:
@@ -142,8 +209,6 @@ paths:
         required: true
     get:
       summary: 查询文档
-      tags:
-        - doc
       responses:
         '200':
           description: OK
@@ -160,7 +225,9 @@ paths:
             schema:
               type: object
         description: ''
-  '/indices/{indexName}/recreate':
+      tags:
+        - index
+  '/indices/{indexName}/active':
     parameters:
       - schema:
           type: string
@@ -168,55 +235,9 @@ paths:
         in: path
         required: true
     post:
-      summary: 重新创建index，用于mapping不兼容的修改
+      summary: 激活Index，开始导入数据
       tags:
-        - doc
-      operationId: post-indices-indexName-recreate
-      responses:
-        '200':
-          description: OK
-  /indices:
-    get:
-      summary: 获取所有的索引
-      tags:
-        - doc
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/IndexModel'
-      operationId: get-indices
-  /collections:
-    get:
-      summary: 获取所有的数据集合
-      tags:
-        - doc
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/IndexModel'
-      operationId: get-collections
-    parameters: []
-  '/collections/{collectionName}':
-    parameters:
-      - schema:
-          type: string
-        name: collectionName
-        in: path
-        required: true
-    get:
-      summary: Your GET endpoint
-      tags:
-        - doc
+        - index
       responses:
         '200':
           description: OK
@@ -224,15 +245,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IndexModel'
-      operationId: get-collections-collectionName
-    delete:
-      summary: ''
-      operationId: delete-collections-collectionName
+          headers:
+            job_id:
+              schema:
+                type: number
+      operationId: post-indices-indexName-active
+      description: ''
+  '/indices/{indexName}/append':
+    parameters:
+      - schema:
+          type: string
+        name: indexName
+        in: path
+        required: true
+    post:
+      summary: 刷新并追加Index的数据
+      tags:
+        - index
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexModel'
+          headers:
+            job_id:
+              schema:
+                type: number
+      operationId: post-indices-indexName-append
+  '/collections/{collectionName}/upload':
+    parameters:
+      - schema:
+          type: string
+        name: collectionName
+        in: path
+        required: true
+    post:
+      summary: 上传excel文件
       tags:
-        - doc
+        - collection
+      responses:
+        '200':
+          description: OK
+          content: {}
+      operationId: post-collections-collectionName-upload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+  '/collections/{collectionName}/properties':
+    parameters:
+      - schema:
+          type: string
+        name: collectionName
+        in: path
+        required: true
+    get:
+      summary: 获取集合中记录所有的Property
+      tags:
+        - collection
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyModel'
+      operationId: get-collections-collectionName-properties
 components:
   securitySchemes:
     BearerAuth:
@@ -245,26 +333,41 @@ components:
         id: 66flccibutzbs
       type: object
       properties:
-        name:
-          type: string
-        mapping:
-          $ref: '#/components/schemas/MappingModel'
-        desc:
-          type: string
-          x-stoplight:
-            id: mu2ysot2256a2
         id:
           type: number
           x-stoplight:
             id: xfbfaigejpo10
+        name:
+          type: string
+        collectionId:
+          type: number
+          x-stoplight:
+            id: 1g3cl192mmmkg
+        collectionName:
+          type: string
+          x-stoplight:
+            id: jqzo99kfdn390
+        desc:
+          type: string
+          x-stoplight:
+            id: mu2ysot2256a2
         esIndexName:
           type: string
           x-stoplight:
             id: a1pp7lypvlpjq
+        mapping:
+          $ref: '#/components/schemas/MappingModel'
         status:
           type: string
           x-stoplight:
             id: yh6h5yh9daoeq
+        autoAppendFromCollection:
+          type: boolean
+          x-stoplight:
+            id: yx4h9b9h3bstj
+      required:
+        - name
+        - autoAppendFromCollection
     MappingModel:
       title: MappingModel
       x-stoplight:
@@ -293,6 +396,11 @@ components:
           type: string
           x-stoplight:
             id: le1ystos1tgx7
+          enum:
+            - TEXT
+            - DATE
+            - NUMBER
+            - BOOL
         alias:
           type: string
           x-stoplight:
@@ -307,11 +415,16 @@ components:
           type: boolean
           x-stoplight:
             id: liyd460xe0orq
+        enable:
+          type: boolean
+          x-stoplight:
+            id: 8m6rf2yo2c243
       required:
         - name
         - type
         - docIdPart
         - required
+        - enable
     RestrictModel:
       title: RestrictModel
       x-stoplight:
@@ -369,4 +482,54 @@ components:
       required:
         - code
         - msg
+    CollectionModel:
+      title: CollectionModel
+      x-stoplight:
+        id: kaafy2bq68773
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+          x-stoplight:
+            id: qtbq4u861jdk7
+        desc:
+          type: string
+          x-stoplight:
+            id: gjr9zmme6sggx
+        indices:
+          type: array
+          x-stoplight:
+            id: uaajwtymh2ht2
+          items:
+            $ref: '#/components/schemas/IndexModel'
+    JobModel:
+      title: JobModel
+      x-stoplight:
+        id: koc77u64ymyeu
+      type: object
+      properties:
+        id:
+          type: number
+        jobType:
+          type: string
+          x-stoplight:
+            id: 2gjm16z00n29i
+        jobStatus:
+          type: string
+          x-stoplight:
+            id: m7pyc7ptd1s6i
+        createAt:
+          type: string
+          x-stoplight:
+            id: 65b5qidimycme
+        updateAt:
+          type: string
+          x-stoplight:
+            id: 3zn0dsn6xfsyz
+        relateId:
+          type: number
+          x-stoplight:
+            id: a8d8uryxoicv8
   requestBodies: {}

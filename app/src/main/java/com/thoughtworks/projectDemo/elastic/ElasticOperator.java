@@ -23,15 +23,15 @@ public class ElasticOperator {
 
     @SneakyThrows
     public void createIndex(String index) {
-        if (elasticsearchClient.indices().exists(r -> r.index(index)).value()){
+        if (elasticsearchClient.indices().exists(r -> r.index(index)).value()) {
             elasticsearchClient.indices().delete(r -> r.index(index));
         }
         elasticsearchClient.indices().create(r -> r.index(index));
     }
 
     @SneakyThrows
-    public void reindex(String sourceIndex,String destIndex){
-        elasticsearchClient.reindex(r->r.source(s->s.index(sourceIndex)).dest(d->d.index(destIndex)));
+    public void reindex(String sourceIndex, String destIndex) {
+        elasticsearchClient.reindex(r -> r.source(s -> s.index(sourceIndex)).dest(d -> d.index(destIndex)));
     }
 
     @SneakyThrows
@@ -52,11 +52,12 @@ public class ElasticOperator {
         request.setJsonEntity(documentJson);
         restClient.performRequest(request);
     }
+
     @SneakyThrows
     public void batchInsertDocument(List<ElasticDocument> elasticDocuments) {
         Request request = new Request("POST", "/_bulk");
         String bulkRequestBody = elasticDocuments.stream()
-                .map(elasticDocument -> "{ \"index\" : { \"_index\" : \"" + elasticDocument.getIndex() + "\", \"_id\" : \"" + elasticDocument.getId() + "\" } }\n" + elasticDocument.getDocumentJson() + "\n")
+                .map(elasticDocument -> "{ \"index\" : { \"_index\" : \"" + elasticDocument.getIndex() + "\", \"_id\" : \"" + elasticDocument.getId() + "\" } }\n" + elasticDocument.buildHasSourceIdDocumentJson(objectMapper) + "\n")
                 .reduce("", (a, b) -> a + b);
         request.setJsonEntity(bulkRequestBody);
         restClient.performRequest(request);
@@ -64,30 +65,31 @@ public class ElasticOperator {
 
     @SneakyThrows
     public void createDocument(ElasticDocument elasticDocument) {
-        var request = new Request("PUT", "/" + elasticDocument.getIndex() + "/_doc"+"/"+elasticDocument.getId());
-        request.setJsonEntity(elasticDocument.getDocumentJson());
+        var request = new Request("PUT", "/" + elasticDocument.getIndex() + "/_doc" + "/" + elasticDocument.getId());
+        request.setJsonEntity(elasticDocument.buildHasSourceIdDocumentJson(objectMapper));
         restClient.performRequest(request);
     }
 
     @SneakyThrows
     public ElasticDocument getDocument(String index, String id) {
-        var request = new Request("Get", "/" + index + "/_doc"+"/"+id);
-        Response response =restClient.performRequest(request);
+        var request = new Request("Get", "/" + index + "/_doc" + "/" + id);
+        Response response = restClient.performRequest(request);
         int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode >= 200 && statusCode < 300) {
-            var json =  EntityUtils.toString(response.getEntity());
-            var docResponse= objectMapper.readValue(json, DocResponse.class);
+            var json = EntityUtils.toString(response.getEntity());
+            var docResponse = objectMapper.readValue(json, DocResponse.class);
             var docJson = objectMapper.writeValueAsString(docResponse.getSource());
-            return new ElasticDocument(docResponse.getIndex(), docResponse.getId(),docJson, docJson);
+            return ElasticDocument.create(objectMapper, docResponse.getIndex(), docResponse.getId(), docJson);
         } else {
             throw new RuntimeException("Failed to perform request. Status code: " + statusCode);
         }
     }
+
     @SneakyThrows
     public List<ElasticDocument> searchDocument(String index, String query) {
         var request = new Request("GET", "/" + index + "/_search");
         request.setJsonEntity(query);
-        Response response =restClient.performRequest(request);
+        Response response = restClient.performRequest(request);
         int statusCode = response.getStatusLine().getStatusCode();
         if (statusCode >= 200 && statusCode < 300) {
             // 从响应中获取内容

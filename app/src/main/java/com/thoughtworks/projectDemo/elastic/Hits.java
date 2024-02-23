@@ -1,11 +1,12 @@
 package com.thoughtworks.projectDemo.elastic;
 
-import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
-public class Hits{
+public class Hits {
 
 	@JsonProperty("hits")
 	private List<HitsItem> hits;

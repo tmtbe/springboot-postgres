@@ -11,6 +11,7 @@ dependencies {
     implementation project(':genDb')
     implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch'
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'com.alibaba:easyexcel:3.3.3'
     testImplementation 'com.playtika.testcontainers:embedded-postgresql:3.1.5'
     testImplementation 'org.springframework.cloud:spring-cloud-starter-bootstrap:3.1.3'
 }

@@ -2,189 +2,277 @@ package com.thoughtworks.projectDemo.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thoughtworks.projectDemo.amqp.AmqpService;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.thoughtworks.projectDemo.Tables;
+import com.thoughtworks.projectDemo.convert.DataMapper;
 import com.thoughtworks.projectDemo.elastic.ElasticDocument;
 import com.thoughtworks.projectDemo.elastic.ElasticOperator;
 import com.thoughtworks.projectDemo.enums.IndexStatus;
-import com.thoughtworks.projectDemo.model.*;
-import com.thoughtworks.projectDemo.tables.daos.DocDao;
-import com.thoughtworks.projectDemo.tables.daos.IndexDao;
-import com.thoughtworks.projectDemo.tables.daos.PropertyDao;
-import com.thoughtworks.projectDemo.tables.pojos.Doc;
-import com.thoughtworks.projectDemo.tables.pojos.Index;
-import com.thoughtworks.projectDemo.tables.pojos.Property;
+import com.thoughtworks.projectDemo.model.DocumentModel;
+import com.thoughtworks.projectDemo.model.IndexModel;
+import com.thoughtworks.projectDemo.model.MappingModel;
+import com.thoughtworks.projectDemo.model.PropertyModel;
+import com.thoughtworks.projectDemo.tables.daos.*;
+import com.thoughtworks.projectDemo.tables.pojos.*;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import static com.thoughtworks.projectDemo.Tables.DOC;
+import static com.thoughtworks.projectDemo.Tables.INDEX_DOC_RECORD;
+import static com.thoughtworks.projectDemo.Tables.INDEX_PROPERTY;
+import static com.thoughtworks.projectDemo.tables.Collection.COLLECTION;
+import static com.thoughtworks.projectDemo.tables.Doc.DOC;
 import static com.thoughtworks.projectDemo.tables.Index.INDEX;
-import static com.thoughtworks.projectDemo.tables.Property.PROPERTY;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class IndexService {
     private final IndexDao indexDao;
-    private final PropertyDao propertyDao;
+    private final IndexPropertyDao indexPropertyDao;
+    private final IndexDocRecordDao indexDocRecordDao;
     private final DocDao docDao;
     private final ObjectMapper objectMapper;
     private final ElasticOperator elasticOperator;
     private final VerifyDocService verifyDocService;
-    private final AmqpService amqpService;
+    private final JobService jobService;
+    private final DataMapper dataMapper;
+    private final CollectionDao collectionDao;
 
-
-    public List<IndexModel> getCollections(){
-        var indexList = indexDao.findAll();
-        return buildIndexModel(indexList);
-    }
-    private Index mustGetCollection(String collectionName){
-        var index = indexDao.fetchOptional(INDEX.NAME, collectionName);
-        if (index.isEmpty()){
-            throw new RuntimeException("Collection is not exists");
-        }
-        return index.get();
-    }
-    public IndexModel mustGetCollectionModel(String collectionName){
-        var index = mustGetCollection(collectionName);
+    public IndexModel mustGetIndexModel(String indexName) {
+        var index = mustGetIndex(indexName);
         return buildIndexModel(List.of(index)).get(0);
     }
 
-    public void deleteCollection(String collectionName){
-        var index = mustGetCollection(collectionName);
-        if (index.getStatus().equals(IndexStatus.Migrating)){
-            throw new RuntimeException("Index is migrating, can not delete");
-        }
-        indexDao.ctx().delete(INDEX).where(INDEX.NAME.eq(collectionName)).execute();
-        indexDao.ctx().delete(PROPERTY).where(PROPERTY.INDEX_ID.eq(index.getId())).execute();
-        indexDao.ctx().delete(DOC).where(DOC.INDEX_ID.eq(index.getId())).execute();
+    private Index mustGetIndex(String indexName) {
+        return indexDao.fetchOptional(INDEX.NAME, indexName).orElseThrow(() -> new RuntimeException("Index not found"));
     }
 
-    public List<IndexModel> getIndices(){
-        var indexList = indexDao.ctx().selectFrom(INDEX).where(INDEX.ES_INDEX.isNotNull()).fetchInto(Index.class);
+    private Boolean isIndexExist(String indexName) {
+        return indexDao.fetchOptional(INDEX.NAME, indexName).isPresent();
+    }
+
+
+    public List<Index> getIndices(Long collectionId) {
+        return indexDao.fetchByCollectionId(collectionId);
+    }
+
+    public List<IndexModel> getIndexModeList(Long collectionId) {
+        var indexList = indexDao.fetchByCollectionId(collectionId);
         return buildIndexModel(indexList);
     }
 
     private List<IndexModel> buildIndexModel(List<Index> indexList) {
-        var propertyList = propertyDao.ctx().selectFrom(PROPERTY).where(PROPERTY.INDEX_ID.in(indexList.stream().map(Index::getId).toList())).fetchInto(Property.class);
+        var indexPropertyList = indexPropertyDao.ctx()
+                .selectFrom(INDEX_PROPERTY)
+                .where(INDEX_PROPERTY.INDEX_ID.in(indexList.stream().map(Index::getId).toList()))
+                .fetchInto(IndexProperty.class);
         return indexList.stream().map(index -> {
-            var indexModel = new IndexModel();
-            indexModel.setId(index.getId());
-            indexModel.setName(index.getName());
-            indexModel.setDesc(index.getDesc());
-            if (index.getStatus()!=null) {
-                indexModel.setStatus(index.getStatus().name());
-            }
-            indexModel.setEsIndexName(index.getEsIndex());
+            var indexModel = dataMapper.toIndexModel(index);
             var mappingModel = new MappingModel();
-            mappingModel.setProperties(propertyList.stream().filter(property -> property.getIndexId().equals(index.getId())).map(property -> {
-                var propertyModel = new PropertyModel();
-                propertyModel.setName(property.getName());
-                propertyModel.setType(property.getType());
-                propertyModel.setAlias(property.getAlias());
-                propertyModel.setRequired(property.getRequired());
-                propertyModel.setDocIdPart(property.getDocIdPart());
-                try {
-                    propertyModel.setRestrict(objectMapper.readValue(property.getRestrict(), RestrictModel.class));
-                } catch (JsonProcessingException e) {
-                    throw new RuntimeException(e);
-                }
-                return propertyModel;
-            }).toList());
+            mappingModel.setProperties(indexPropertyList.stream()
+                    .filter(property -> property.getIndexId().equals(index.getId()))
+                    .map(dataMapper::toPropertyModel).toList());
             indexModel.setMapping(mappingModel);
             return indexModel;
         }).toList();
     }
 
-    public void deleteIndex(String indexName){
+    @Transactional
+    public void deleteIndex(String indexName, Boolean retainData) {
         var index = mustGetIndex(indexName);
         assert index.getStatus() != null;
-        if (index.getStatus().equals(IndexStatus.Migrating)){
+        if (index.getStatus().equals(IndexStatus.Migrating)) {
             throw new RuntimeException("Index is migrating, can not delete");
         }
-        elasticOperator.deleteIndex(index.getEsIndex());
-        index.setEsIndex(null);
-        index.setStatus(IndexStatus.Inactivated);
-        indexDao.update(index);
-    }
-
-    public IndexModel mustGetIndexModel(String indexName){
-        var index = mustGetIndex(indexName);
-        return buildIndexModel(List.of(index)).get(0);
-    }
-
-    private Index mustGetIndex(String indexName){
-        return indexDao.ctx().selectFrom(INDEX)
-                .where(INDEX.NAME.eq(indexName))
-                .and(INDEX.ES_INDEX.isNotNull())
-                .fetchOptional()
-                .map(it->it.into(Index.class))
-                .orElseThrow(()->new RuntimeException("Index is not exists"));
+        elasticOperator.deleteIndex(index.getEsIndexName());
+        indexDao.delete(index);
+        if (!retainData) {
+            // 不保留数据则会删除doc中关于这个index修改的数据
+            docDao.ctx().deleteFrom(DOC)
+                    .where(DOC.MODIFY_BY_INDEX.eq(index.getId()))
+                    .execute();
+        }
+        indexPropertyDao.ctx().deleteFrom(INDEX_PROPERTY)
+                .where(INDEX_PROPERTY.INDEX_ID.eq(index.getId()))
+                .execute();
+        indexDocRecordDao.ctx().deleteFrom(INDEX_DOC_RECORD)
+                .where(INDEX_DOC_RECORD.INDEX_ID.eq(index.getId()))
+                .execute();
     }
 
     private String getEsIndexName(String indexName) {
-        return mustGetIndex(indexName).getEsIndex();
+        return mustGetIndex(indexName).getEsIndexName();
     }
 
     public void createIndex(IndexModel indexModel) {
-        var index = indexDao.fetchOptional(INDEX.NAME, indexModel.getName());
-        if (index.isPresent()){
+        if (isIndexExist(indexModel.getName())) {
             throw new RuntimeException("Index already exists");
         }
+        if (indexModel.getCollectionId() == null && indexModel.getCollectionName() == null) {
+            throw new RuntimeException("CollectionId and CollectionName can not be null at the same time");
+        }
+        checkIndexProperties(indexModel);
+        Collection collection = null;
+        if (indexModel.getCollectionName() != null) {
+            collection = collectionDao.fetchOptional(COLLECTION.NAME, indexModel.getCollectionName()).orElseThrow(() -> new RuntimeException("Collection not found"));
+        } else if (indexModel.getCollectionId() != null) {
+            collection = collectionDao.fetchOptionalById(indexModel.getCollectionId()).orElseThrow(() -> new RuntimeException("Collection not found"));
+            ;
+        }
+        assert collection != null;
+        indexModel.setCollectionName(collection.getName());
+        indexModel.setCollectionId(collection.getId());
         // 写入ES,es使用的是esIndex
-        var esIndex = indexModel.getName()+"@"+System.currentTimeMillis();
+        var esIndex = indexModel.getName() + "@" + System.currentTimeMillis();
         indexModel.setEsIndexName(esIndex);
         elasticOperator.createIndex(esIndex);
         // 写入数据库
         var newIndex = new Index();
         newIndex.setName(indexModel.getName());
         newIndex.setDesc(indexModel.getDesc());
-        newIndex.setEsIndex(esIndex);
-        newIndex.setStatus(IndexStatus.Activated);
+        newIndex.setEsIndexName(esIndex);
+        newIndex.setStatus(IndexStatus.Inactivated);
+        newIndex.setCollectionId(indexModel.getCollectionId());
+        newIndex.setCollectionName(indexModel.getCollectionName());
+        newIndex.setAutoAppendFromCollection(indexModel.getAutoAppendFromCollection());
         indexDao.insert(newIndex);
         insertProperties(indexModel, newIndex);
+        indexModel.setId(newIndex.getId());
+        indexModel.setStatus(IndexStatus.Inactivated.name());
+    }
+
+    private void checkIndexProperties(IndexModel indexModel) {
+        var propertiesNameList = indexModel.getMapping().getProperties().stream().map(PropertyModel::getName).toList();
+        var distinctPropertiesNameList = propertiesNameList.stream().distinct();
+        if (propertiesNameList.size() != distinctPropertiesNameList.count()) {
+            throw new RuntimeException("Property name can not be duplicate");
+        }
+        AtomicBoolean hasIdPart = new AtomicBoolean(false);
+        indexModel.getMapping().getProperties().forEach(propertyModel -> {
+            if (propertyModel.getDocIdPart()) {
+                hasIdPart.set(true);
+            }
+        });
+        if (!hasIdPart.get()) {
+            throw new RuntimeException("Index doc id part is not exists, you need to set one property as doc id part.");
+        }
     }
 
     private void insertProperties(IndexModel indexModel, Index index) {
         assert index.getId() != null;
-        propertyDao.insert(indexModel.getMapping().getProperties().stream().map(property -> {
-            var newProperty = new Property();
-            newProperty.setIndexId(index.getId());
-            newProperty.setName(property.getName());
-            newProperty.setType(property.getType());
-            newProperty.setAlias(property.getAlias());
-            newProperty.setDocIdPart(property.getDocIdPart());
-            newProperty.setRequired(property.getRequired());
-            try {
-                newProperty.setRestrict(objectMapper.writeValueAsString(property.getRestrict()));
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
-            }
-            return newProperty;
-        }).toList());
+        indexPropertyDao.insert(indexModel.getMapping().getProperties().stream().map(property -> dataMapper.toIndexProperty(property)
+                .setIndexId(index.getId())).toList());
     }
 
-    public void updateIndex(IndexModel indexModel){
+    @Transactional
+    @SneakyThrows
+    public Optional<Job> updateIndex(IndexModel indexModel) {
         var index = mustGetIndex(indexModel.getName());
-        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())){
-            throw new RuntimeException("Index is migrating, can not update");
-        }
-        // 更新数据库
+        assert index.getId() != null;
         index.setDesc(indexModel.getDesc());
         indexDao.update(index);
-        var oldProperties = propertyDao.fetchByIndexId(index.getId());
-        propertyDao.delete(oldProperties);
-        insertProperties(indexModel, index);
-        oldProperties.forEach(it->{
-            var find = indexModel.getMapping().getProperties().stream().filter(p->p.getName().equals(it.getName())).findFirst();
-            if (find.isPresent()){
-                if (!find.get().getType().equals(it.getType())){
-                    throw new RuntimeException("Can not change property type, you need to recreate index");
+        if (indexModel.getMapping() == null) {
+            return Optional.empty();
+        }
+        // 更新mapping
+        checkIndexProperties(indexModel);
+        var oldProperties = indexPropertyDao.fetchByIndexId(index.getId());
+        var oldPropertiesMap = oldProperties.stream().collect(Collectors.toMap(IndexProperty::getName, it -> it));
+        var updateProperties = new ArrayList<IndexProperty>();
+        var insertProperties = new ArrayList<IndexProperty>();
+        // 如果不兼容则需要recreate
+        // 1. 新增需要recreate，这会导致es中的mapping需要新增，历史数据丢失字段
+        // 2. docIdPart改变需要recreate，这会导致es历史数据中的_id不对
+        // 3. type改变需要recreate，这会导致es中的mapping不兼容性的改变
+        // 4. 缩减的是require的字段或者是docIdPart需要recreate
+        var needRecreate = false;
+
+        for (PropertyModel propertyModel : indexModel.getMapping().getProperties()) {
+            if (propertyModel.getEnable()) {
+                var old = oldPropertiesMap.remove(propertyModel.getName());
+                if (old == null) {
+                    // 如果新增的则一定要recreate
+                    needRecreate = true;
+                    insertProperties.add(
+                            dataMapper.toIndexProperty(propertyModel)
+                                    .setIndexId(index.getId()));
+                } else {
+                    if (old.getDocIdPart() != propertyModel.getDocIdPart() || !old.getType().equals(propertyModel.getType().name())) {
+                        // 如果docIdPart改变或者type改变了则需要recreate
+                        needRecreate = true;
+                    }
+                    // 更新mapping字段，因为被移出了所以重新放到更新队列中
+                    updateProperties.add(dataMapper.toIndexProperty(propertyModel).setId(old.getId())
+                            .setIndexId(old.getIndexId()));
                 }
+            } else {
+                // 更新下字段
+                var old = oldPropertiesMap.get(propertyModel.getName());
+                old.setType(propertyModel.getType().name());
+                old.setDocIdPart(propertyModel.getDocIdPart());
+                old.setAlias(propertyModel.getAlias());
+                old.setRequired(propertyModel.getRequired());
+                old.setRestrict(objectMapper.writeValueAsString(propertyModel.getRestrict()));
+                old.setEnable(propertyModel.getEnable());
             }
-        });
+        }
+        // 剩下的是缩减的字段
+        for (IndexProperty indexProperty : oldPropertiesMap.values()) {
+            indexProperty.setEnable(false);
+            updateProperties.add(indexProperty);
+            if (Boolean.TRUE.equals(indexProperty.getDocIdPart()) || Boolean.TRUE.equals(indexProperty.getRequired())) {
+                needRecreate = true;
+                break;
+            }
+        }
+
+        assert index.getStatus() != null;
+        if (!index.getStatus().equals(IndexStatus.Inactivated) && needRecreate) {
+            // 这种情况需要recreate就直接删干净重来
+            indexPropertyDao.ctx().deleteFrom(INDEX_PROPERTY)
+                    .where(INDEX_PROPERTY.INDEX_ID.eq(index.getId()))
+                    .execute();
+            insertProperties(indexModel, index);
+            return Optional.of(recreateIndex(indexModel.getName()));
+        } else {
+            // 否则就更新mapping字段
+            var updateList = updateProperties.stream().filter(it -> {
+                if (it.getEnable() != null) {
+                    return it.getEnable();
+                } else {
+                    return false;
+                }
+            }).toList();
+            if (!updateList.isEmpty()) {
+                indexPropertyDao.update(updateList);
+            }
+            var deleteList = updateProperties.stream().filter(it -> {
+                if (it.getEnable() != null) {
+                    return !it.getEnable();
+                } else {
+                    return true;
+                }
+            }).toList();
+            if (!deleteList.isEmpty()) {
+                indexPropertyDao.delete(deleteList);
+            }
+            if (!insertProperties.isEmpty()) {
+                indexPropertyDao.insert(insertProperties);
+            }
+            return Optional.empty();
+        }
     }
 
     @SneakyThrows
@@ -203,75 +291,77 @@ public class IndexService {
      */
     public void updateDocument(String indexName, String docId, Object document) throws JsonProcessingException {
         var indexModel = mustGetIndexModel(indexName);
-        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())){
+        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())) {
             throw new RuntimeException("Index is migrating, can not insert or update document");
         }
-        // 验证
-        var original_source = objectMapper.writeValueAsString(document);
-        var source = verifyDocService.verifyDoc(indexModel, original_source);
-        // 原始的数据插入数据库，对于doc表来说不存在更新的操作，只有插入
+        // 获取ES上的文档
+        var elasticDoc = elasticOperator.getDocument(indexModel.getEsIndexName(), docId);
+        // 获取数据库中原始文档
+        var docOriginalSource = docDao.fetchOptionalById(elasticDoc.getSourceId()).orElseThrow(() -> new RuntimeException("Doc not found")).getSource();
+        // 验证做出的修改是否合法
+        var documentUpdateSource = objectMapper.writeValueAsString(document);
+        var source = verifyDocService.verifyDoc(indexModel, documentUpdateSource);
+        // 合并修改到数据库中原始的文档中，确保字段不会丢失
+        var docOriginalObjectNode = objectMapper.convertValue(objectMapper.readTree(docOriginalSource), ObjectNode.class);
+        objectMapper.readTree(documentUpdateSource).fields().forEachRemaining(entry -> {
+            docOriginalObjectNode.replace(entry.getKey(), entry.getValue());
+        });
+        var modifySource = objectMapper.writeValueAsString(docOriginalObjectNode);
+        // 插入数据库，对于doc表来说不存在更新的操作，只有插入
         var newDoc = new Doc();
-        newDoc.setSource(original_source);
-        newDoc.setIndexId(indexModel.getId());
+        newDoc.setSource(modifySource);
+        newDoc.setCollectionId(indexModel.getId());
+        newDoc.setModifyByIndex(indexModel.getId());
         docDao.insert(newDoc);
         // 将转换后的文档更新或者插入ES
         elasticOperator.createDocument(ElasticDocument.builder().index(indexModel.getEsIndexName()).id(docId).documentJson(source).build());
     }
 
-    public List<ElasticDocument> processInsertDocument(IndexModel indexModel,List<ElasticDocument> batchDoc,Boolean ignoreError) {
+    public List<ElasticDocument> processInsertDocument(IndexModel indexModel,
+                                                       List<ElasticDocument> batchDoc,
+                                                       Boolean ignoreError,
+                                                       Consumer<Exception> exceptionConsumer) {
         var docIdPart = indexModel.getMapping().getProperties().stream().filter(PropertyModel::getDocIdPart).map(PropertyModel::getName).sorted().toList();
-        if (docIdPart.isEmpty()){
+        if (docIdPart.isEmpty()) {
             throw new RuntimeException("Index doc id part is not exists, you need to set one property as doc id part.");
         }
-        batchDoc.forEach(it-> {
+        var verifyBatchDoc = new ArrayList<ElasticDocument>();
+        batchDoc.forEach(it -> {
+            var edBuilder = ElasticDocument.builder();
             // 验证并转换
             try {
-                it.setOriginalJson(it.getDocumentJson());
-            }catch (Exception e){
-                if (ignoreError){
-                    return;
-                }else {
+                edBuilder.documentJson(verifyDocService.verifyDoc(indexModel, it.getDocumentJson()));
+                var id = docIdPart.stream().map(propertyName -> {
+                    var value = "";
+                    try {
+                        var sourceJsonObject = objectMapper.readTree(it.getDocumentJson());
+                        var valueNode = sourceJsonObject.get(propertyName);
+                        if (valueNode != null) {
+                            value = valueNode.asText();
+                        }
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
+                    return value;
+                }).collect(Collectors.joining("-"));
+                edBuilder.id(id);
+                edBuilder.index(indexModel.getEsIndexName());
+                edBuilder.sourceId(it.getSourceId());
+            } catch (Exception e) {
+                if (!ignoreError) {
                     throw e;
+                } else {
+                    exceptionConsumer.accept(e);
                 }
             }
-            it.setDocumentJson(verifyDocService.verifyDoc(indexModel, it.getDocumentJson()));
-            var id = docIdPart.stream().map(propertyName -> {
-                var value = "";
-                try {
-                    var sourceJsonObject = objectMapper.readTree(it.getDocumentJson());
-                    var valueNode = sourceJsonObject.get(propertyName);
-                    if (valueNode!=null){
-                        value = valueNode.asText();
-                    }
-                } catch (JsonProcessingException e) {
-                    throw new RuntimeException(e);
-                }
-                return value;
-            }).collect(Collectors.joining("-"));
-            it.setId(id);
-            it.setIndex(indexModel.getEsIndexName());
+            verifyBatchDoc.add(edBuilder.build());
         });
-        return batchDoc;
-    }
-    public void batchInsertDocument(String indexName,String batchId, List<ElasticDocument> batchDoc) {
-        var indexModel = mustGetIndexModel(indexName);
-        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())){
-            throw new RuntimeException("Index is migrating, can not insert");
-        }
-        batchDoc = processInsertDocument(indexModel, batchDoc,false);
-        docDao.insert(batchDoc.stream().map(elasticDocument -> {
-            var doc = new Doc();
-            doc.setIndexId(indexModel.getId());
-            doc.setBatchId(batchId);
-            doc.setSource(elasticDocument.getOriginalJson());
-            return doc;
-        }).toList());
-        // ES本来就会根据docId更新或者插入
-        elasticOperator.batchInsertDocument(batchDoc);
+        return verifyBatchDoc;
     }
 
     public List<DocumentModel> searchDocument(String indexName, String body) {
-        var elasticDocuments = elasticOperator.searchDocument(indexName,body);
+        var index = mustGetIndex(indexName);
+        var elasticDocuments = elasticOperator.searchDocument(index.getEsIndexName(), body);
         return elasticDocuments.stream().map(elasticDocument -> {
             var doc = new DocumentModel();
             doc.setIndex(indexName);
@@ -285,22 +375,124 @@ public class IndexService {
         }).collect(Collectors.toList());
     }
 
-    public void recreateIndex(String indexName){
+    public Job recreateIndex(String indexName) {
         var indexModel = mustGetIndexModel(indexName);
-        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())){
+        if (indexModel.getStatus().equals(IndexStatus.Migrating.name())) {
             throw new RuntimeException("Index is migrating, can not recreate");
         }
         var oldEsIndexName = indexModel.getEsIndexName();
-        var newEsIndexName = indexName+"@"+System.currentTimeMillis();
+        var newEsIndexName = indexName + "@" + System.currentTimeMillis();
         elasticOperator.createIndex(newEsIndexName);
         indexModel.setEsIndexName(newEsIndexName);
-        elasticOperator.deleteIndex(oldEsIndexName);
-        var indexRecord = indexDao.fetchOne(INDEX.NAME, indexModel.getName());
-        assert indexRecord != null;
-        indexRecord.setEsIndex(newEsIndexName);
-        indexRecord.setStatus(IndexStatus.Migrating);
-        indexDao.update(indexRecord);
+        // 有可能为null因为可能被主动删了
+        if (oldEsIndexName != null) {
+            elasticOperator.deleteIndex(oldEsIndexName);
+        }
+        var index = indexDao.fetchOne(INDEX.NAME, indexModel.getName());
+        assert index != null;
         // 重新导入数据(异步方式)
-        amqpService.recreateIndex(indexName);
+        var job = jobService.createReinsertIndexDocJob(index.getId());
+        index.setEsIndexName(newEsIndexName);
+        index.setStatus(IndexStatus.Migrating);
+        indexDao.update(index);
+        return job;
+    }
+
+    @SneakyThrows
+    public Job activeIndex(String indexName) {
+        var indexModel = mustGetIndexModel(indexName);
+        if (indexModel.getStatus().equals(IndexStatus.Inactivated.name())) {
+            indexDao.ctx().update(INDEX)
+                    .set(INDEX.STATUS, IndexStatus.Migrating)
+                    .where(INDEX.NAME.eq(indexName))
+                    .execute();
+        } else {
+            throw new RuntimeException("Index is not inactivated, can not active");
+        }
+        // 固化es的mapping
+        var mappingNode = objectMapper.createObjectNode();
+        var propertiesNode = objectMapper.createObjectNode();
+        indexModel.getMapping().getProperties().forEach(propertyModel -> {
+            switch (propertyModel.getType()) {
+                case TEXT -> propertiesNode.put(propertyModel.getName(), "keyword");
+                case NUMBER -> propertiesNode.put(propertyModel.getName(), "numeric");
+                case BOOL -> propertiesNode.put(propertyModel.getName(), "boolean");
+                case DATE -> propertiesNode.put(propertyModel.getName(), "date");
+            }
+        });
+        mappingNode.set("properties", objectMapper.createObjectNode());
+        elasticOperator.createMapping(indexModel.getEsIndexName(), objectMapper.writeValueAsString(mappingNode));
+        // 开始导入数据的任务
+        return jobService.createReinsertIndexDocJob(indexModel.getId());
+    }
+
+    /**
+     * 追加数据
+     */
+    public Job appendData(String indexName) {
+        var index = mustGetIndex(indexName);
+        assert index.getStatus() != null;
+        if (index.getStatus().equals(IndexStatus.Inactivated)) {
+            throw new RuntimeException("Index is inactivated, can not append data");
+        }
+        if (index.getStatus().equals(IndexStatus.Migrating)) {
+            throw new RuntimeException("Index is migrating, can not append data");
+        }
+        var job = jobService.createAppendIndexDocJob(index.getId());
+        index.setStatus(IndexStatus.Migrating);
+        indexDao.update(index);
+        return job;
+    }
+
+    /**
+     * 追加数据的具体实现
+     */
+    public void appendDataProcess(String indexName, Long startDocId, Consumer<Exception> exceptionConsumer) {
+        var startDocIdAtomic = new AtomicReference<>(startDocId);
+        try {
+            final int pageSize = 10; // 每页的大小
+            boolean hasNextPage = true;
+            var indexModel = mustGetIndexModel(indexName);
+            while (hasNextPage) {
+                // 构建分页查询并执行
+                var docs = docDao.ctx().select().from(Tables.DOC)
+                        .where(Tables.DOC.ID.gt(startDocIdAtomic.get())
+                                .and(Tables.DOC.MODIFY_BY_INDEX.eq(indexModel.getId())
+                                        .or(Tables.DOC.MODIFY_BY_INDEX.isNull())))
+                        .limit(pageSize)
+                        .fetchInto(Doc.class);
+                if (docs.isEmpty()) {
+                    break;
+                }
+                docs.stream().map(Doc::getId).filter(Objects::nonNull).max(Long::compareTo).ifPresent(startDocIdAtomic::set);
+                var batchDoc = processInsertDocument(indexModel, docs.stream().map(it -> ElasticDocument.builder().index(indexModel.getEsIndexName())
+                        .sourceId(it.getId())
+                        .documentJson(it.getSource()).build()).toList(), true, exceptionConsumer);
+                elasticOperator.batchInsertDocument(batchDoc);
+                // 检查是否有下一页
+                hasNextPage = docs.size() == pageSize;
+            }
+        } catch (Exception e) {
+            log.error("appendDataProcess error", e);
+        } finally {
+            // 恢复索引状态
+            var index = indexDao.fetchOne(INDEX.NAME, indexName);
+            assert index != null;
+            index.setStatus(IndexStatus.Activated);
+            indexDao.update(index);
+            // 记录最后的docId到IndexDocRecord表
+            var indexDocRecord = indexDocRecordDao.fetchOptional(INDEX_DOC_RECORD.INDEX_ID, index.getId());
+            if (indexDocRecord.isPresent()) {
+                var nowIndexDocRecord = indexDocRecord.get();
+                nowIndexDocRecord.setLatestDocId(startDocIdAtomic.get());
+                indexDocRecordDao.update(nowIndexDocRecord);
+            } else {
+                var newIndexDocRecord = new IndexDocRecord();
+                assert index.getId() != null;
+                newIndexDocRecord.setIndexId(index.getId());
+                newIndexDocRecord.setLatestDocId(startDocIdAtomic.get());
+                indexDocRecordDao.insert(newIndexDocRecord);
+            }
+        }
     }
 }
