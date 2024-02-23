@@ -261,6 +261,10 @@ components:
           type: string
           x-stoplight:
             id: a1pp7lypvlpjq
+        status:
+          type: string
+          x-stoplight:
+            id: yh6h5yh9daoeq
     MappingModel:
       title: MappingModel
       x-stoplight:

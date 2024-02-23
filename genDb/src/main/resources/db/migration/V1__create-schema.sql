@@ -1,3 +1,4 @@
+create type index_status as enum('Inactivated','Activated','Migrating');
 create table public.index
 (
     id        bigserial
@@ -5,6 +6,7 @@ create table public.index
     name      varchar(255)              not null,
     es_index  varchar(255),
     "desc"    varchar(255),
+    status    index_status default 'Inactivated' not null,
     create_at timestamp default current_timestamp,
     update_at timestamp
 );

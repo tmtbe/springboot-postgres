@@ -39,7 +39,7 @@ public class Doc implements DocApiDelegate{
 
     @Override
     public ResponseEntity<IndexModel> getCollectionsCollectionName(String collectionName) throws Exception {
-        var index = indexService.mustGetCollection(collectionName);
+        var index = indexService.mustGetCollectionModel(collectionName);
         return new ResponseEntity<>(index, HttpStatus.OK);
     }
 

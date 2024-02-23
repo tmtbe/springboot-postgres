@@ -11,7 +11,11 @@ import java.util.List;
 @AllArgsConstructor
 public class AmqpService {
     private final RabbitTemplate rabbitTemplate;
-    public void send(BatchInsertDocument batchInsertDocument) {
+    public void insertDoc(BatchInsertDocument batchInsertDocument) {
         rabbitTemplate.convertAndSend("insertDocExchange", "insert.doc", batchInsertDocument);
+    }
+
+    public void recreateIndex(String indexName) {
+        rabbitTemplate.convertAndSend("recreateIndexExchange", "index.recreate", indexName);
     }
 }
